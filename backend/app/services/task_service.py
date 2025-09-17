@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-
+import weakref
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -35,12 +35,127 @@ class TaskService:
         # Service instances
         self.redis_service = RedisService()
         self.log_service = LogService()
+        # Process output streams management
+        self.process_streams = {}  # task_id -> {'process': process, 'log_buffer': []}
+        self.stream_subscribers = {}  # task_id -> set of weak references to queues
 
     def _ensure_tasks_file(self):
         """Ensure task file exists"""
         if not os.path.exists(self.tasks_file):
             with open(self.tasks_file, "w", encoding="utf-8") as f:
                 json.dump([], f)
+
+    async def _read_process_output(self, task_id: str, process: asyncio.subprocess.Process):
+        """Read process output and distribute to subscribers"""
+        try:
+            # Read stdout
+            async def read_stdout():
+                while True:
+                    try:
+                        line = await process.stdout.readline()
+                        if not line:
+                            break
+                        log_line = {
+                            "timestamp": datetime.now().isoformat(),
+                            "level": "INFO",
+                            "message": line.decode('utf-8').strip(),
+                            "source": "stdout"
+                        }
+                        await self._distribute_log(task_id, log_line)
+                    except Exception as e:
+                        print(f"Error reading stdout for task {task_id}: {e}")
+                        break
+
+            # Read stderr
+            async def read_stderr():
+                while True:
+                    try:
+                        line = await process.stderr.readline()
+                        if not line:
+                            break
+                        log_line = {
+                            "timestamp": datetime.now().isoformat(),
+                            "level": "ERROR",
+                            "message": line.decode('utf-8').strip(),
+                            "source": "stderr"
+                        }
+                        await self._distribute_log(task_id, log_line)
+                    except Exception as e:
+                        print(f"Error reading stderr for task {task_id}: {e}")
+                        break
+
+            # Start both readers concurrently
+            await asyncio.gather(read_stdout(), read_stderr(), return_exceptions=True)
+
+        except Exception as e:
+            print(f"Error in process output reader for task {task_id}: {e}")
+        finally:
+            # Clean up when process ends
+            if task_id in self.process_streams:
+                del self.process_streams[task_id]
+            if task_id in self.stream_subscribers:
+                del self.stream_subscribers[task_id]
+
+    async def _distribute_log(self, task_id: str, log_line: dict):
+        """Distribute log line to all subscribers"""
+        # Store in buffer
+        if task_id in self.process_streams:
+            buffer = self.process_streams[task_id].get('log_buffer', [])
+            buffer.append(log_line)
+            # Keep only last 1000 lines
+            if len(buffer) > 1000:
+                buffer.pop(0)
+            self.process_streams[task_id]['log_buffer'] = buffer
+
+        # Send to subscribers
+        if task_id in self.stream_subscribers:
+            dead_refs = set()
+            for queue_ref in self.stream_subscribers[task_id].copy():
+                queue = queue_ref()
+                if queue is None:
+                    dead_refs.add(queue_ref)
+                else:
+                    try:
+                        await queue.put(log_line)
+                    except Exception:
+                        dead_refs.add(queue_ref)
+
+            # Clean up dead references
+            self.stream_subscribers[task_id] -= dead_refs
+
+    def subscribe_to_logs(self, task_id: str, queue: asyncio.Queue):
+        """Subscribe to task logs"""
+        if task_id not in self.stream_subscribers:
+            self.stream_subscribers[task_id] = set()
+
+        # Use weak reference to avoid memory leaks
+        queue_ref = weakref.ref(queue)
+        self.stream_subscribers[task_id].add(queue_ref)
+
+        # Send existing buffer to new subscriber
+        if task_id in self.process_streams:
+            buffer = self.process_streams[task_id].get('log_buffer', [])
+            asyncio.create_task(self._send_buffer_to_queue(queue, buffer))
+
+    async def _send_buffer_to_queue(self, queue: asyncio.Queue, buffer: list):
+        """Send buffered logs to a queue"""
+        try:
+            for log_line in buffer:
+                await queue.put(log_line)
+        except Exception as e:
+            print(f"Error sending buffer to queue: {e}")
+
+    def unsubscribe_from_logs(self, task_id: str, queue: asyncio.Queue):
+        """Unsubscribe from task logs"""
+        if task_id in self.stream_subscribers:
+            # Find and remove the weak reference
+            to_remove = None
+            for queue_ref in self.stream_subscribers[task_id]:
+                if queue_ref() is queue:
+                    to_remove = queue_ref
+                    break
+            if to_remove:
+                self.stream_subscribers[task_id].discard(to_remove)
 
     def _load_tasks(self) -> List[Dict]:
         """Load all tasks from file"""
@@ -297,6 +412,15 @@ class TaskService:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=os.path.dirname(settings.redis_shake_bin_path),
             )
+
+            # Store process and start reading output
+            self.process_streams[task_id] = {
+                'process': process,
+                'log_buffer': []
+            }
+
+            # Start reading process output in background
+            asyncio.create_task(self._read_process_output(task_id, process))
 
             # Start
             await asyncio.sleep(2)
@@ -676,6 +800,15 @@ class TaskService:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=os.path.dirname(settings.redis_shake_bin_path),
             )
+
+            # Store process and start reading output
+            self.process_streams[task.id] = {
+                'process': process,
+                'log_buffer': []
+            }
+
+            # Start reading process output in background
+            asyncio.create_task(self._read_process_output(task.id, process))
 
             # Start
             await asyncio.sleep(2)

@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from app.models.schemas import APIResponse, TaskLogCreate
 from app.services.log_service import LogService
+from app.services.task_service import TaskService
 
 router = APIRouter()
 
@@ -14,6 +15,9 @@ router = APIRouter()
 # Dependency injection
 def get_log_service():
     return LogService()
+
+def get_task_service():
+    return TaskService()
 
 
 @router.get("/", response_model=APIResponse)
@@ -100,53 +104,60 @@ async def clear_all_logs(service: LogService = Depends(get_log_service)):
 
 @router.get("/task/{task_id}/stream")
 async def stream_task_logs(
-    task_id: str, service: LogService = Depends(get_log_service)
+    task_id: str,
+    task_service: TaskService = Depends(get_task_service)
 ):
-    """Stream real-time task logs using Server-Sent Events"""
+    """Stream real-time Redis-Shake process logs using Server-Sent Events"""
 
     async def event_generator():
-        """Generate SSE events for task logs"""
+        """Generate SSE events for Redis-Shake process logs"""
+        log_queue = asyncio.Queue()
+
         try:
             # Send initial connection event
-            yield f"data: {json.dumps({'type': 'connected', 'message': 'Connected to log stream'})}\n\n"
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Connected to Redis-Shake log stream'})}\n\n"
 
-            # Get existing logs first
-            existing_logs = service.get_logs_by_task(task_id, limit=50)
-            for log in existing_logs:
-                log_data = {
-                    "type": "log",
-                    "timestamp": log.timestamp,
-                    "level": log.level,
-                    "message": log.message,
-                    "task_id": log.task_id,
-                }
-                yield f"data: {json.dumps(log_data)}\n\n"
+            # Subscribe to task logs
+            task_service.subscribe_to_logs(task_id, log_queue)
 
-            # Stream new logs in real-time
-            last_check = len(existing_logs)
+            # Check if task is running
+            task = await task_service.get_task(task_id)
+            if not task:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Task not found'})}\n\n"
+                return
+
+            if task.status != 'running':
+                yield f"data: {json.dumps({'type': 'info', 'message': f'Task is {task.status}. Start the task to see real-time logs.'})}\n\n"
+                # Still continue to listen in case task gets started
+
+            # Stream logs in real-time
+            heartbeat_counter = 0
             while True:
                 try:
-                    # Get new logs since last check
-                    all_logs = service.get_logs_by_task(task_id, limit=100)
-                    new_logs = all_logs[last_check:]
+                    # Wait for log with timeout for heartbeat
+                    try:
+                        log_line = await asyncio.wait_for(log_queue.get(), timeout=5.0)
 
-                    for log in new_logs:
+                        # Send log event
                         log_data = {
                             "type": "log",
-                            "timestamp": log.timestamp,
-                            "level": log.level,
-                            "message": log.message,
-                            "task_id": log.task_id,
+                            "timestamp": log_line["timestamp"],
+                            "level": log_line["level"],
+                            "message": log_line["message"],
+                            "source": log_line.get("source", "redis-shake"),
+                            "task_id": task_id,
                         }
                         yield f"data: {json.dumps(log_data)}\n\n"
 
-                    last_check = len(all_logs)
-
-                    # Send heartbeat to keep connection alive
-                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': str(asyncio.get_event_loop().time())})}\n\n"
-
-                    # Wait before next check
-                    await asyncio.sleep(1)
+                    except asyncio.TimeoutError:
+                        # Send heartbeat every 5 seconds if no logs
+                        heartbeat_counter += 1
+                        heartbeat_data = {
+                            "type": "heartbeat",
+                            "timestamp": str(asyncio.get_event_loop().time()),
+                            "count": heartbeat_counter
+                        }
+                        yield f"data: {json.dumps(heartbeat_data)}\n\n"
 
                 except asyncio.CancelledError:
                     # Client disconnected
@@ -165,6 +176,12 @@ async def stream_task_logs(
             # Send final error event
             error_data = {"type": "error", "message": f"Fatal stream error: {str(e)}"}
             yield f"data: {json.dumps(error_data)}\n\n"
+        finally:
+            # Clean up subscription
+            try:
+                task_service.unsubscribe_from_logs(task_id, log_queue)
+            except Exception:
+                pass
 
     return StreamingResponse(
         event_generator(),
