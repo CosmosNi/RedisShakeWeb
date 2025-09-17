@@ -9,7 +9,7 @@ import {
   Input,
   message,
   Card,
-  Popconfirm
+  Dropdown
 } from 'antd';
 import {
   PlusOutlined,
@@ -19,7 +19,8 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   EyeOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  MoreOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { taskApi } from '../services/api';
@@ -141,15 +142,7 @@ target_mbbloom_version = 20603`;
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
-  // 格式化时间
-  const formatDateTime = (dateStr) => {
-    if (!dateStr) return '-';
-    try {
-      return new Date(dateStr).toLocaleString('zh-CN');
-    } catch (e) {
-      return dateStr;
-    }
-  };
+
 
   // 启动任务
   const handleStart = async (task) => {
@@ -293,111 +286,126 @@ target_mbbloom_version = 20603`;
       title: '任务名称',
       dataIndex: 'name',
       key: 'name',
-      width: 200,
+      width: 180,
       ellipsis: true,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 120,
+      width: 100,
       render: (status) => getStatusTag(status),
     },
     {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 180,
-      render: formatDateTime,
+      width: 150,
+      render: (time) => time ? new Date(time).toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : '-',
     },
     {
       title: '开始时间',
       dataIndex: 'started_at',
       key: 'started_at',
-      width: 180,
-      render: formatDateTime,
+      width: 150,
+      render: (time) => time ? new Date(time).toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : '-',
     },
     {
       title: '进程ID',
       dataIndex: 'process_id',
       key: 'process_id',
-      width: 100,
+      width: 80,
       render: (pid) => pid || '-',
     },
     {
       title: '操作',
       key: 'actions',
-      width: 300,
-      render: (_, record) => (
-        <Space size="small">
-          <Button
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => navigate(`/task/${record.id}`)}
-          >
-            详情
-          </Button>
-          <Button
-            size="small"
-            icon={<FileTextOutlined />}
-            onClick={() => {
-              setSelectedTask(record);
-              setLogModalVisible(true);
-            }}
-          >
-            日志
-          </Button>
-          <Button
-            type="primary"
-            size="small"
-            icon={<PlayCircleOutlined />}
-            onClick={() => handleStart(record)}
-            disabled={record.status === 'running'}
-          >
-            启动
-          </Button>
-          <Button
-            size="small"
-            icon={<PauseCircleOutlined />}
-            onClick={() => handleStop(record)}
-            disabled={record.status !== 'running'}
-          >
-            停止
-          </Button>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => openModal(record)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title={
-              record.status === 'running'
-                ? "任务正在运行中，确定要停止并删除吗？"
-                : "确定要删除这个任务吗？"
-            }
-            description={
-              record.status === 'running'
-                ? "删除运行中的任务会先停止任务，然后删除相关配置。"
-                : "删除后将无法恢复，请确认操作。"
-            }
-            onConfirm={() => handleDelete(record)}
-            okText={record.status === 'running' ? "停止并删除" : "确定"}
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-          >
+      width: 160,
+      fixed: 'right',
+      render: (_, record) => {
+        const moreMenuItems = [
+          {
+            key: 'edit',
+            icon: <EditOutlined />,
+            label: '编辑',
+            onClick: () => openModal(record),
+          },
+          {
+            key: 'delete',
+            icon: <DeleteOutlined />,
+            label: '删除',
+            danger: true,
+            onClick: () => {
+              Modal.confirm({
+                title: record.status === 'running'
+                  ? "任务正在运行中，确定要停止并删除吗？"
+                  : "确定要删除这个任务吗？",
+                content: record.status === 'running'
+                  ? "删除运行中的任务会先停止任务，然后删除相关配置。"
+                  : "删除后将无法恢复，请确认操作。",
+                okText: record.status === 'running' ? "停止并删除" : "确定",
+                cancelText: "取消",
+                okButtonProps: { danger: true },
+                onOk: () => handleDelete(record),
+              });
+            },
+          },
+        ];
+
+        return (
+          <Space size={4}>
             <Button
               size="small"
-              danger
-              icon={<DeleteOutlined />}
-              disabled={record.status === 'running'}
+              icon={<EyeOutlined />}
+              onClick={() => navigate(`/task/${record.id}`)}
+              title="查看详情"
+            />
+            <Button
+              size="small"
+              icon={<FileTextOutlined />}
+              onClick={() => {
+                setSelectedTask(record);
+                setLogModalVisible(true);
+              }}
+              title="查看日志"
+            />
+            {record.status === 'running' ? (
+              <Button
+                size="small"
+                icon={<PauseCircleOutlined />}
+                onClick={() => handleStop(record)}
+                title="停止任务"
+                danger
+              />
+            ) : (
+              <Button
+                type="primary"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                onClick={() => handleStart(record)}
+                title="启动任务"
+              />
+            )}
+            <Dropdown
+              menu={{ items: moreMenuItems }}
+              trigger={['click']}
+              placement="bottomRight"
             >
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
+              <Button size="small" icon={<MoreOutlined />} title="更多操作" />
+            </Dropdown>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -431,6 +439,7 @@ target_mbbloom_version = 20603`;
           dataSource={tasks}
           rowKey="id"
           loading={loading}
+          scroll={{ x: 800 }}
           pagination={{
             pageSize: 10,
             showSizeChanger: true,

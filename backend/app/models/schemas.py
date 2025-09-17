@@ -4,14 +4,6 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 
-class RedisMode(str, Enum):
-    """Redis mode enumeration"""
-
-    STANDALONE = "standalone"
-    SENTINEL = "sentinel"
-    CLUSTER = "cluster"
-
-
 class TaskStatus(str, Enum):
     """Task status enumeration"""
 
@@ -33,85 +25,6 @@ class LogLevel(str, Enum):
 
 
 # Remove unused enums: ReaderType, SyncMode
-
-
-class RedisConfig(BaseModel):
-    """Redis connection configuration"""
-
-    id: Optional[str] = Field(None, description="Configuration ID")
-    name: str = Field(..., description="Configuration name")
-    mode: RedisMode = Field(..., description="Redis mode")
-    host: str = Field(..., description="Host address")
-    port: int = Field(6379, description="Port number")
-    password: Optional[str] = Field(None, description="Password")
-
-    # Sentinel mode configuration
-    sentinel_hosts: Optional[List[dict]] = Field(
-        None, description="Sentinel nodes list"
-    )
-    master_name: Optional[str] = Field(None, description="Master node name")
-
-    # Cluster mode configuration
-    cluster_nodes: Optional[List[dict]] = Field(None, description="Cluster nodes list")
-
-    # Other configuration
-    database: int = Field(0, description="Database number")
-    timeout: int = Field(5, description="Connection timeout (seconds)")
-
-    def validate_config(self) -> List[str]:
-        """Validate configuration and return error messages list"""
-        errors = []
-
-        if self.mode == RedisMode.SENTINEL:
-            if not self.sentinel_hosts:
-                errors.append("Sentinel mode requires sentinel_hosts configuration")
-            if not self.master_name:
-                errors.append("Sentinel mode requires master_name configuration")
-
-        elif self.mode == RedisMode.CLUSTER:
-            if not self.cluster_nodes:
-                errors.append("Cluster mode requires cluster_nodes configuration")
-
-        # Validate port range
-        if not (1 <= self.port <= 65535):
-            errors.append("Port number must be in range 1-65535")
-
-        # Validate database number
-        if not (0 <= self.database <= 15):
-            errors.append("Database number must be in range 0-15")
-
-        # Validate timeout
-        if self.timeout <= 0:
-            errors.append("Connection timeout must be greater than 0")
-
-        return errors
-
-
-class RedisConfigCreate(RedisConfig):
-    """Create Redis configuration"""
-
-    pass
-
-
-class RedisConfigUpdate(BaseModel):
-    """Update Redis configuration"""
-
-    name: Optional[str] = None
-    mode: Optional[RedisMode] = None
-    host: Optional[str] = None
-    port: Optional[int] = None
-    password: Optional[str] = None
-    sentinel_hosts: Optional[List[dict]] = None
-    master_name: Optional[str] = None
-    cluster_nodes: Optional[List[dict]] = None
-    database: Optional[int] = None
-    timeout: Optional[int] = None
-    password: Optional[str] = None
-    sentinel_hosts: Optional[List[dict]] = None
-    master_name: Optional[str] = None
-    cluster_nodes: Optional[List[dict]] = None
-    database: Optional[int] = None
-    timeout: Optional[int] = None
 
 
 class SyncTaskCreate(BaseModel):

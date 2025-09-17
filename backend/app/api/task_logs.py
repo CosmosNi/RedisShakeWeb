@@ -16,6 +16,7 @@ router = APIRouter()
 def get_log_service():
     return LogService()
 
+
 def get_task_service():
     return TaskService()
 
@@ -104,8 +105,7 @@ async def clear_all_logs(service: LogService = Depends(get_log_service)):
 
 @router.get("/task/{task_id}/stream")
 async def stream_task_logs(
-    task_id: str,
-    task_service: TaskService = Depends(get_task_service)
+    task_id: str, task_service: TaskService = Depends(get_task_service)
 ):
     """Stream real-time Redis-Shake process logs using Server-Sent Events"""
 
@@ -115,7 +115,11 @@ async def stream_task_logs(
 
         try:
             # Send initial connection event
-            yield f"data: {json.dumps({'type': 'connected', 'message': 'Connected to Redis-Shake log stream'})}\n\n"
+            connection_msg = {
+                'type': 'connected',
+                'message': 'Connected to Redis-Shake log stream'
+            }
+            yield f"data: {json.dumps(connection_msg)}\n\n"
 
             # Subscribe to task logs
             task_service.subscribe_to_logs(task_id, log_queue)
@@ -123,11 +127,19 @@ async def stream_task_logs(
             # Check if task is running
             task = await task_service.get_task(task_id)
             if not task:
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Task not found'})}\n\n"
+                error_msg = {'type': 'error', 'message': 'Task not found'}
+                yield f"data: {json.dumps(error_msg)}\n\n"
                 return
 
-            if task.status != 'running':
-                yield f"data: {json.dumps({'type': 'info', 'message': f'Task is {task.status}. Start the task to see real-time logs.'})}\n\n"
+            if task.status != "running":
+                info_msg = {
+                    'type': 'info',
+                    'message': (
+                        f'Task is {task.status}. '
+                        'Start the task to see real-time logs.'
+                    )
+                }
+                yield f"data: {json.dumps(info_msg)}\n\n"
                 # Still continue to listen in case task gets started
 
             # Stream logs in real-time
@@ -154,14 +166,20 @@ async def stream_task_logs(
                         heartbeat_counter += 1
                         heartbeat_data = {
                             "type": "heartbeat",
-                            "timestamp": str(asyncio.get_event_loop().time()),
-                            "count": heartbeat_counter
+                            "timestamp": str(
+                                asyncio.get_event_loop().time()
+                            ),
+                            "count": heartbeat_counter,
                         }
                         yield f"data: {json.dumps(heartbeat_data)}\n\n"
 
                 except asyncio.CancelledError:
                     # Client disconnected
-                    yield f"data: {json.dumps({'type': 'disconnected', 'message': 'Stream disconnected'})}\n\n"
+                    disconnect_msg = {
+                        'type': 'disconnected',
+                        'message': 'Stream disconnected'
+                    }
+                    yield f"data: {json.dumps(disconnect_msg)}\n\n"
                     break
                 except Exception as e:
                     # Send error event

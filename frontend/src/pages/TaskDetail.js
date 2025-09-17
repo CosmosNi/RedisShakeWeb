@@ -251,8 +251,15 @@ function TaskDetail() {
   return (
     <div style={{ padding: '24px' }}>
       {/* 页面头部 */}
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Space>
+      <div style={{
+        marginBottom: 24,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '16px'
+      }}>
+        <Space wrap>
           <Button
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate('/sync-tasks')}
@@ -263,7 +270,7 @@ function TaskDetail() {
             任务详情: {task.name}
           </Title>
         </Space>
-        <Space>
+        <Space wrap>
           <Button
             type="primary"
             icon={<FileTextOutlined />}

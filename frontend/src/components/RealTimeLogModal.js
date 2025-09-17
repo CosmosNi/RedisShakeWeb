@@ -248,40 +248,42 @@ const RealTimeLogModal = ({ visible, onClose, taskId, taskName }) => {
       width={1000}
       height={600}
       footer={[
-        <Space key="controls">
+        <Space key="controls" wrap>
           <Tooltip title="暂停/恢复日志显示">
             <Button
               icon={isPaused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
               onClick={togglePause}
               type={isPaused ? "primary" : "default"}
+              size="small"
             >
               {isPaused ? '恢复' : '暂停'}
             </Button>
           </Tooltip>
-          
+
           <Tooltip title="清空当前显示的日志">
-            <Button icon={<ClearOutlined />} onClick={clearLogs}>
+            <Button icon={<ClearOutlined />} onClick={clearLogs} size="small">
               清空
             </Button>
           </Tooltip>
-          
+
           <Tooltip title="导出日志到文件">
-            <Button icon={<DownloadOutlined />} onClick={exportLogs} disabled={logs.length === 0}>
+            <Button icon={<DownloadOutlined />} onClick={exportLogs} disabled={logs.length === 0} size="small">
               导出
             </Button>
           </Tooltip>
-          
+
           <Tooltip title="重新连接">
-            <Button icon={<ReloadOutlined />} onClick={connectSSE} loading={isLoading}>
+            <Button icon={<ReloadOutlined />} onClick={connectSSE} loading={isLoading} size="small">
               重连
             </Button>
           </Tooltip>
-          
+
           <Switch
             checkedChildren="自动滚动"
             unCheckedChildren="手动滚动"
             checked={autoScroll}
             onChange={setAutoScroll}
+            size="small"
           />
         </Space>
       ]}

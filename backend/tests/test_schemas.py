@@ -3,20 +3,14 @@ Tests for Pydantic schemas
 """
 import pytest
 from app.models.schemas import (
-    RedisMode,
     TaskStatus,
     LogLevel,
-    RedisConfig,
     SyncTaskCreate,
     APIResponse
 )
 
 
-def test_redis_mode_enum():
-    """Test RedisMode enum values"""
-    assert RedisMode.STANDALONE == "standalone"
-    assert RedisMode.SENTINEL == "sentinel"
-    assert RedisMode.CLUSTER == "cluster"
+
 
 
 def test_task_status_enum():
@@ -37,31 +31,7 @@ def test_log_level_enum():
     assert LogLevel.CRITICAL == "CRITICAL"
 
 
-def test_redis_config_creation():
-    """Test RedisConfig model creation"""
-    config = RedisConfig(
-        name="test-config",
-        mode=RedisMode.STANDALONE,
-        host="localhost",
-        port=6379
-    )
-    assert config.name == "test-config"
-    assert config.mode == RedisMode.STANDALONE
-    assert config.host == "localhost"
-    assert config.port == 6379
-    assert config.database == 0  # default value
 
-
-def test_redis_config_validation():
-    """Test RedisConfig validation"""
-    config = RedisConfig(
-        name="test-config",
-        mode=RedisMode.STANDALONE,
-        host="localhost",
-        port=6379
-    )
-    errors = config.validate_config()
-    assert len(errors) == 0
 
 
 def test_sync_task_create():

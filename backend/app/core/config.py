@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     redis_shake_bin_path: str = os.path.join(BASE_DIR, "..", "bin", "redis-shake")
     redis_shake_config_dir: str = os.path.join(BASE_DIR, "..", "configs")
     redis_shake_log_dir: str = os.path.join(BASE_DIR, "..", "logs")
+    redis_shake_data_dir: str = os.path.join(BASE_DIR, "..", "data")  # Data directory
 
     # Redis connection configuration
     redis_host: str = "localhost"
@@ -42,3 +43,4 @@ settings = Settings()
 # Ensure necessary directories exist
 os.makedirs(settings.redis_shake_config_dir, exist_ok=True)
 os.makedirs(settings.redis_shake_log_dir, exist_ok=True)
+os.makedirs(settings.redis_shake_data_dir, exist_ok=True)

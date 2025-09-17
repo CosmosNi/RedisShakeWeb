@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.redis_config import router as redis_config_router
 from app.api.sync_tasks import router as sync_tasks_router
 from app.api.task_logs import router as task_logs_router
 from app.services.task_service import TaskService
@@ -71,7 +70,6 @@ app.add_middleware(
 )
 
 # Register routes
-app.include_router(redis_config_router, prefix="/api/v1/redis", tags=["Redis Config"])
 app.include_router(sync_tasks_router, prefix="/api/v1/tasks", tags=["Sync Tasks"])
 app.include_router(task_logs_router, prefix="/api/v1/logs", tags=["Task Logs"])
 

@@ -6,13 +6,13 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import aiofiles
 import aiohttp
 import psutil
 
 from app.core.config import settings
 from app.models.schemas import (
     LogLevel,
-    RedisConfig,
     SyncTask,
     SyncTaskCreate,
     SyncTaskUpdate,
@@ -20,20 +20,30 @@ from app.models.schemas import (
     TaskStatus,
 )
 from app.services.log_service import LogService
-from app.services.redis_service import RedisService
 
 
 class TaskService:
     """Sync task management service"""
 
+    _instance = None
+    _initialized = False
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(TaskService, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
+        if TaskService._initialized:
+            return
+        TaskService._initialized = True
+
         # Task file storage path
         self.tasks_file = os.path.join(
             settings.redis_shake_config_dir, "sync_tasks.json"
         )
         self._ensure_tasks_file()
         # Service instances
-        self.redis_service = RedisService()
         self.log_service = LogService()
         # Process output streams management
         self.process_streams = {}  # task_id -> {'process': process, 'log_buffer': []}
@@ -45,9 +55,14 @@ class TaskService:
             with open(self.tasks_file, "w", encoding="utf-8") as f:
                 json.dump([], f)
 
-    async def _read_process_output(self, task_id: str, process: asyncio.subprocess.Process):
+    async def _read_process_output(
+        self, task_id: str, process: asyncio.subprocess.Process
+    ):
         """Read process output and distribute to subscribers"""
         try:
+            # Start log file monitoring
+            log_file_task = asyncio.create_task(self._monitor_log_file(task_id))
+
             # Read stdout
             async def read_stdout():
                 while True:
@@ -58,8 +73,8 @@ class TaskService:
                         log_line = {
                             "timestamp": datetime.now().isoformat(),
                             "level": "INFO",
-                            "message": line.decode('utf-8').strip(),
-                            "source": "stdout"
+                            "message": line.decode("utf-8").strip(),
+                            "source": "stdout",
                         }
                         await self._distribute_log(task_id, log_line)
                     except Exception as e:
@@ -76,8 +91,8 @@ class TaskService:
                         log_line = {
                             "timestamp": datetime.now().isoformat(),
                             "level": "ERROR",
-                            "message": line.decode('utf-8').strip(),
-                            "source": "stderr"
+                            "message": line.decode("utf-8").strip(),
+                            "source": "stderr",
                         }
                         await self._distribute_log(task_id, log_line)
                     except Exception as e:
@@ -90,22 +105,82 @@ class TaskService:
         except Exception as e:
             print(f"Error in process output reader for task {task_id}: {e}")
         finally:
+            # Cancel log file monitoring
+            if "log_file_task" in locals():
+                log_file_task.cancel()
+
             # Clean up when process ends
             if task_id in self.process_streams:
                 del self.process_streams[task_id]
             if task_id in self.stream_subscribers:
                 del self.stream_subscribers[task_id]
 
+    async def _monitor_log_file(self, task_id: str):
+        """Monitor task-specific log file for changes"""
+        log_file_path = self._get_task_log_file_path(task_id)
+        last_position = 0
+
+        try:
+            while True:
+                try:
+                    if os.path.exists(log_file_path):
+                        async with aiofiles.open(
+                            log_file_path, "r", encoding="utf-8"
+                        ) as f:
+                            # Seek to last known position
+                            await f.seek(last_position)
+
+                            # Read new lines
+                            while True:
+                                line = await f.readline()
+                                if not line:
+                                    break
+
+                                # Parse JSON log line
+                                try:
+                                    log_data = json.loads(line.strip())
+                                    log_line = {
+                                        "timestamp": log_data.get(
+                                            "time", datetime.now().isoformat()
+                                        ),
+                                        "level": log_data.get("level", "INFO").upper(),
+                                        "message": log_data.get("message", ""),
+                                        "source": "redis-shake",
+                                    }
+                                    await self._distribute_log(task_id, log_line)
+                                except json.JSONDecodeError:
+                                    # If not JSON, treat as plain text
+                                    log_line = {
+                                        "timestamp": datetime.now().isoformat(),
+                                        "level": "INFO",
+                                        "message": line.strip(),
+                                        "source": "redis-shake",
+                                    }
+                                    await self._distribute_log(task_id, log_line)
+
+                            # Update last position
+                            last_position = await f.tell()
+
+                    # Wait before checking again
+                    await asyncio.sleep(0.5)
+
+                except Exception as e:
+                    print(f"Error monitoring log file for task {task_id}: {e}")
+                    await asyncio.sleep(1)
+
+        except asyncio.CancelledError:
+            print(f"Log file monitoring cancelled for task {task_id}")
+
     async def _distribute_log(self, task_id: str, log_line: dict):
         """Distribute log line to all subscribers"""
         # Store in buffer
         if task_id in self.process_streams:
-            buffer = self.process_streams[task_id].get('log_buffer', [])
+            buffer = self.process_streams[task_id].get("log_buffer", [])
             buffer.append(log_line)
             # Keep only last 1000 lines
             if len(buffer) > 1000:
                 buffer.pop(0)
-            self.process_streams[task_id]['log_buffer'] = buffer
+            self.process_streams[task_id]["log_buffer"] = buffer
 
         # Send to subscribers
         if task_id in self.stream_subscribers:
@@ -134,7 +209,7 @@ class TaskService:
 
         # Send existing buffer to new subscriber
         if task_id in self.process_streams:
-            buffer = self.process_streams[task_id].get('log_buffer', [])
+            buffer = self.process_streams[task_id].get("log_buffer", [])
             asyncio.create_task(self._send_buffer_to_queue(queue, buffer))
 
     async def _send_buffer_to_queue(self, queue: asyncio.Queue, buffer: list):
@@ -324,13 +399,6 @@ class TaskService:
 
         return False
 
-    def _generate_shake_config(
-        self, task: SyncTask, source_config: RedisConfig, target_config: RedisConfig
-    ) -> str:
-        """redis-shakeconfiguration"""
-        # taskconfiguration
-        return task.custom_config
-
     def _ensure_status_port(self, config_content: str, task_id: str) -> str:
         """configuration"""
         import re
@@ -361,6 +429,61 @@ class TaskService:
 
         return config_content
 
+    def _ensure_task_specific_paths(self, config_content: str, task_id: str) -> str:
+        """Ensure each task has its own working directory and log file"""
+        import re
+
+        # Create task-specific directory path
+        task_data_dir = os.path.join(settings.redis_shake_data_dir, f"task_{task_id}")
+
+        # Calculate relative path to redis-shake binary file
+        redis_shake_dir = os.path.dirname(settings.redis_shake_bin_path)
+        relative_data_dir = os.path.relpath(task_data_dir, redis_shake_dir)
+
+        # Log file relative path to task data directory
+        relative_log_file = "logs/" + f"task_{task_id}.log"
+
+        # Update or add dir setting (use relative path)
+        if re.search(r"dir\s*=", config_content):
+            config_content = re.sub(
+                r'dir\s*=\s*"[^"]*"', f'dir = "{relative_data_dir}"', config_content
+            )
+        else:
+            # Add dir setting to [advanced] section
+            if "[advanced]" in config_content:
+                config_content = re.sub(
+                    r"(\[advanced\])",
+                    f'\\1\ndir = "{relative_data_dir}"',
+                    config_content,
+                )
+            else:
+                config_content += f'\n\n[advanced]\ndir = "{relative_data_dir}"\n'
+
+        # Update or add log_file setting (use relative path to dir)
+        if re.search(r"log_file\s*=", config_content):
+            config_content = re.sub(
+                r'log_file\s*=\s*"[^"]*"',
+                f'log_file = "{relative_log_file}"',
+                config_content,
+            )
+        else:
+            # Add log_file setting to [advanced] section
+            if "[advanced]" in config_content:
+                config_content = re.sub(
+                    r"(\[advanced\])",
+                    f'\\1\nlog_file = "{relative_log_file}"',
+                    config_content,
+                )
+            else:
+                config_content += f'\n\n[advanced]\nlog_file = "{relative_log_file}"\n'
+
+        return config_content
+
+    def _get_task_log_file_path(self, task_id: str) -> str:
+        """Get the log file path for a specific task"""
+        task_data_dir = os.path.join(settings.redis_shake_data_dir, f"task_{task_id}")
+        return os.path.join(task_data_dir, "logs", f"task_{task_id}.log")
+
     async def start_task(self, task_id: str) -> Dict[str, Any]:
         """Starttask"""
         # task
@@ -381,14 +504,20 @@ class TaskService:
             raise ValueError("TOMLconfiguration")
 
         try:
-            # configuration，
-            config_content = self._ensure_status_port(task.custom_config, task_id)
-            config_path = os.path.join(
-                settings.redis_shake_config_dir, f"task_{task_id}.toml"
+            # Create task-specific data directory
+            task_data_dir = os.path.join(
+                settings.redis_shake_data_dir, f"task_{task_id}"
             )
+            os.makedirs(task_data_dir, exist_ok=True)
 
-            # configuration
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            # Create task log directory
+            task_log_dir = os.path.join(task_data_dir, "logs")
+            os.makedirs(task_log_dir, exist_ok=True)
+
+            # Store configuration to task directory
+            config_content = self._ensure_status_port(task.custom_config, task_id)
+            config_content = self._ensure_task_specific_paths(config_content, task_id)
+            config_path = os.path.join(task_data_dir, f"task_{task_id}.toml")
 
             # configuration
             with open(config_path, "w", encoding="utf-8") as f:
@@ -414,10 +543,7 @@ class TaskService:
             )
 
             # Store process and start reading output
-            self.process_streams[task_id] = {
-                'process': process,
-                'log_buffer': []
-            }
+            self.process_streams[task_id] = {"process": process, "log_buffer": []}
 
             # Start reading process output in background
             asyncio.create_task(self._read_process_output(task_id, process))
@@ -775,16 +901,26 @@ class TaskService:
     async def _restart_task(self, task: SyncTask) -> None:
         """Starttask"""
         try:
-            # configuration
-            config_path = os.path.join(
-                settings.redis_shake_config_dir, f"task_{task.id}.toml"
+            # Create task-specific data directory
+            task_data_dir = os.path.join(
+                settings.redis_shake_data_dir, f"task_{task.id}"
             )
+            os.makedirs(task_data_dir, exist_ok=True)
 
-            # Ensure configuration file exists
-            if not os.path.exists(config_path):
-                # configuration
-                with open(config_path, "w", encoding="utf-8") as f:
-                    f.write(task.custom_config)
+            # Create task log directory
+            task_log_dir = os.path.join(task_data_dir, "logs")
+            os.makedirs(task_log_dir, exist_ok=True)
+
+            # Store configuration to task directory
+            config_path = os.path.join(task_data_dir, f"task_{task.id}.toml")
+
+            # Ensure configuration file exists with proper paths
+            config_content = self._ensure_status_port(task.custom_config, task.id)
+            config_content = self._ensure_task_specific_paths(config_content, task.id)
+
+            # Write updated configuration
+            with open(config_path, "w", encoding="utf-8") as f:
+                f.write(config_content)
 
             # redis-shake
             if not os.path.exists(settings.redis_shake_bin_path):
@@ -802,10 +938,7 @@ class TaskService:
             )
 
             # Store process and start reading output
-            self.process_streams[task.id] = {
-                'process': process,
-                'log_buffer': []
-            }
+            self.process_streams[task.id] = {"process": process, "log_buffer": []}
 
             # Start reading process output in background
             asyncio.create_task(self._read_process_output(task.id, process))
