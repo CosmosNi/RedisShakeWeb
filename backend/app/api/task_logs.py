@@ -1,8 +1,8 @@
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.models.schemas import APIResponse, TaskLog, TaskLogCreate
+from app.models.schemas import APIResponse, TaskLogCreate
 from app.services.log_service import LogService
 
 router = APIRouter()

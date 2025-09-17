@@ -2,10 +2,10 @@ import json
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from app.core.config import settings
-from app.models.schemas import LogLevel, TaskLog, TaskLogCreate
+from app.models.schemas import TaskLog, TaskLogCreate
 
 
 class LogService:
@@ -85,7 +85,7 @@ class LogService:
             task_logs.sort(key=lambda x: x["timestamp"], reverse=True)
             logs_to_keep = task_logs[: self.max_logs_per_task]
 
-            # 
+            #
             other_logs = [log for log in logs if log["task_id"] != task_id]
             logs.clear()
             logs.extend(other_logs + logs_to_keep)

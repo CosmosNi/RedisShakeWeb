@@ -1,4 +1,3 @@
-import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.redis_config import router as redis_config_router
 from app.api.sync_tasks import router as sync_tasks_router
 from app.api.task_logs import router as task_logs_router
-from app.core.config import settings
 from app.services.task_service import TaskService
 
 # Global task service instance
@@ -26,7 +24,9 @@ async def lifespan(app: FastAPI):
         recovery_result = await task_service.recover_running_tasks()
 
         if recovery_result["recovered_count"] > 0:
-            print(f"✅ Successfully recovered {recovery_result['recovered_count']} tasks")
+            print(
+                f"✅ Successfully recovered {recovery_result['recovered_count']} tasks"
+            )
             for task in recovery_result["recovered_tasks"]:
                 print(f"   - {task['task_name']} (ID: {task['task_id']})")
 

@@ -1,8 +1,6 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.models.schemas import APIResponse, SyncTask, SyncTaskCreate, SyncTaskUpdate
+from app.models.schemas import APIResponse, SyncTaskCreate, SyncTaskUpdate
 from app.services.task_service import TaskService
 
 router = APIRouter()
@@ -43,8 +41,9 @@ async def create_sync_task(
 ):
     """Create sync task
 
-    Note: Must provide custom TOML configuration content (custom_config field), otherwise the task cannot start.
-    Configuration content should contain complete redis-shake configuration, for example:
+    Note: Must provide custom TOML configuration content (custom_config field),
+    otherwise the task cannot start. Configuration content should contain complete
+    redis-shake configuration, for example:
 
     ```toml
     [sync_reader]
@@ -65,7 +64,9 @@ async def create_sync_task(
     try:
         # Validate if custom configuration is provided
         if not task.custom_config:
-            raise HTTPException(status_code=400, detail="Must provide custom TOML configuration content")
+            raise HTTPException(
+                status_code=400, detail="Must provide custom TOML configuration content"
+            )
 
         created_task = await service.create_task(task)
         return APIResponse(data=created_task, message="Task created successfully")
@@ -102,7 +103,8 @@ async def delete_sync_task(
     """Delete sync task
 
     Note: Only non-running tasks can be deleted.
-    If the task is running, you must first call the stop task interface and wait for the task to stop before deleting.
+    If the task is running, you must first call the stop task interface and wait
+    for the task to stop before deleting.
 
     Deleting a task will also clean up related configuration files.
     """
@@ -154,7 +156,9 @@ async def get_task_status(
     """Get task real-time status"""
     try:
         status_info = await service.get_task_status(task_id)
-        return APIResponse(data=status_info, message="Task status retrieved successfully")
+        return APIResponse(
+            data=status_info, message="Task status retrieved successfully"
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -168,7 +172,9 @@ async def get_task_realtime_status(
     """Get task Redis-Shake real-time status"""
     try:
         realtime_status = await service.get_realtime_status(task_id)
-        return APIResponse(data=realtime_status, message="Real-time status retrieved successfully")
+        return APIResponse(
+            data=realtime_status, message="Real-time status retrieved successfully"
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

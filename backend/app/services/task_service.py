@@ -1,8 +1,7 @@
 import asyncio
 import json
 import os
-import signal
-import subprocess
+
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -286,11 +285,9 @@ class TaskService:
 
             # redis-shake
             if not os.path.exists(settings.redis_shake_bin_path):
-                raise ValueError(
-                    f"redis-shake: {settings.redis_shake_bin_path}"
-                )
+                raise ValueError(f"redis-shake: {settings.redis_shake_bin_path}")
 
-            # 
+            #
             cmd = [settings.redis_shake_bin_path, config_path]
 
             # Start
@@ -304,10 +301,10 @@ class TaskService:
             # Start
             await asyncio.sleep(2)
 
-            # 
+            #
             if process.returncode is None:
                 # ，Startsuccessfully
-                # 
+                #
                 status_port = 8080 + hash(task_id) % 1000
 
                 # Updatetask
@@ -398,14 +395,14 @@ class TaskService:
             # ID，
             if task.process_id:
                 try:
-                    # 
+                    #
                     if psutil.pid_exists(task.process_id):
                         process = psutil.Process(task.process_id)
 
-                        # 
+                        #
                         process.terminate()
 
-                        # 
+                        #
                         try:
                             process.wait(timeout=10)  # 10
                             success = True
@@ -416,7 +413,7 @@ class TaskService:
                             success = True
                             error_message = ""
                     else:
-                        # 
+                        #
                         success = True
                         error_message = ""
 
@@ -525,7 +522,7 @@ class TaskService:
             elif task.status == TaskStatus.FAILED:
                 statistics["failed"] += 1
 
-            # 
+            #
             statistics["total_keys"] += task.total_keys or 0
             statistics["processed_keys"] += task.processed_keys or 0
             statistics["failed_keys"] += task.failed_keys or 0
@@ -596,7 +593,7 @@ class TaskService:
             for task in tasks:
                 if task.status == TaskStatus.RUNNING:
                     try:
-                        # 
+                        #
                         if task.process_id and psutil.pid_exists(task.process_id):
                             # ，
                             continue
@@ -667,11 +664,9 @@ class TaskService:
 
             # redis-shake
             if not os.path.exists(settings.redis_shake_bin_path):
-                raise ValueError(
-                    f"redis-shake: {settings.redis_shake_bin_path}"
-                )
+                raise ValueError(f"redis-shake: {settings.redis_shake_bin_path}")
 
-            # 
+            #
             cmd = [settings.redis_shake_bin_path, config_path]
 
             # Start
@@ -685,7 +680,7 @@ class TaskService:
             # Start
             await asyncio.sleep(2)
 
-            # 
+            #
             if process.returncode is None:
                 # ，Startsuccessfully
                 # configuration
@@ -709,9 +704,7 @@ class TaskService:
                 print(f"task {task.name} successfully，PID: {process.pid}")
             else:
                 # Startfailed
-                raise ValueError(
-                    f"redis-shakeStartfailed，: {process.returncode}"
-                )
+                raise ValueError(f"redis-shakeStartfailed，: {process.returncode}")
 
         except Exception as e:
             raise ValueError(f"taskfailed: {str(e)}")

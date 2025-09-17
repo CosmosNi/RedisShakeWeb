@@ -46,7 +46,9 @@ class RedisConfig(BaseModel):
     password: Optional[str] = Field(None, description="Password")
 
     # Sentinel mode configuration
-    sentinel_hosts: Optional[List[dict]] = Field(None, description="Sentinel nodes list")
+    sentinel_hosts: Optional[List[dict]] = Field(
+        None, description="Sentinel nodes list"
+    )
     master_name: Optional[str] = Field(None, description="Master node name")
 
     # Cluster mode configuration
@@ -117,7 +119,9 @@ class SyncTaskCreate(BaseModel):
 
     name: str = Field(..., description="Task name")
     custom_config: str = Field(
-        ..., description="Custom TOML configuration content, must provide complete redis-shake configuration"
+        ...,
+        description="Custom TOML configuration content, must provide complete "
+        "redis-shake configuration",
     )
 
     def validate_toml_config(self) -> List[str]:
@@ -137,7 +141,9 @@ class SyncTaskCreate(BaseModel):
             required_sections = ["sync_reader", "redis_writer"]
             for section in required_sections:
                 if section not in config_data:
-                    errors.append(f"Missing required configuration section: [{section}]")
+                    errors.append(
+                        f"Missing required configuration section: [{section}]"
+                    )
 
             # Validate sync_reader configuration
             if "sync_reader" in config_data:
@@ -165,7 +171,9 @@ class SyncTask(BaseModel):
 
     # Custom TOML configuration
     custom_config: str = Field(
-        ..., description="Custom TOML configuration content, contains complete redis-shake configuration"
+        ...,
+        description="Custom TOML configuration content, contains complete "
+        "redis-shake configuration",
     )
 
     # Task status
@@ -179,7 +187,9 @@ class SyncTask(BaseModel):
 
     # Process information
     process_id: Optional[int] = Field(None, description="Process ID")
-    status_port: Optional[int] = Field(None, description="Redis-Shake status monitoring port")
+    status_port: Optional[int] = Field(
+        None, description="Redis-Shake status monitoring port"
+    )
 
     # Progress information
     total_keys: Optional[int] = Field(0, description="Total key count")
@@ -200,7 +210,9 @@ class SyncTaskUpdate(BaseModel):
     total_keys: Optional[int] = None
     processed_keys: Optional[int] = None
     failed_keys: Optional[int] = None
-    custom_config: Optional[str] = Field(None, description="Custom TOML configuration content")
+    custom_config: Optional[str] = Field(
+        None, description="Custom TOML configuration content"
+    )
 
 
 class TaskLog(BaseModel):

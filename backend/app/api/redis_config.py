@@ -1,10 +1,7 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.models.schemas import (
     APIResponse,
-    RedisConfig,
     RedisConfigCreate,
     RedisConfigUpdate,
 )
@@ -57,7 +54,9 @@ async def create_redis_config(
     """
     try:
         created_config = await service.create_config(config)
-        return APIResponse(data=created_config, message="Configuration created successfully")
+        return APIResponse(
+            data=created_config, message="Configuration created successfully"
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -75,7 +74,9 @@ async def update_redis_config(
         updated_config = await service.update_config(config_id, config_update)
         if not updated_config:
             raise HTTPException(status_code=404, detail="configurationnot found")
-        return APIResponse(data=updated_config, message="configurationUpdatesuccessfully")
+        return APIResponse(
+            data=updated_config, message="configurationUpdatesuccessfully"
+        )
     except HTTPException:
         raise
     except ValueError as e:
@@ -98,9 +99,6 @@ async def delete_redis_config(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-
 
 
 @router.post("/configs/{config_id}/test", response_model=APIResponse)

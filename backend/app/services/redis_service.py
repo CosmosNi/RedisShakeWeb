@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import uuid
@@ -106,7 +105,9 @@ class RedisService:
                 # Validate configuration
                 validation_errors = updated_config.validate_config()
                 if validation_errors:
-                    raise ValueError(f"configurationfailed: {'; '.join(validation_errors)}")
+                    raise ValueError(
+                        f"configurationfailed: {'; '.join(validation_errors)}"
+                    )
 
                 # Check if configuration name is duplicate（configuration）
                 if "name" in update_data:
@@ -162,7 +163,9 @@ class RedisService:
             elif config.mode == "sentinel":
                 # Sentinel mode
                 if not config.sentinel_hosts or not config.master_name:
-                    raise ValueError("Sentinel modeconfigurationsentinel_hostsmaster_name")
+                    raise ValueError(
+                        "Sentinel modeconfigurationsentinel_hostsmaster_name"
+                    )
 
                 sentinel_hosts = [
                     (host["host"], host["port"]) for host in config.sentinel_hosts
@@ -221,5 +224,5 @@ class RedisService:
             if redis_client:
                 try:
                     await redis_client.close()
-                except:
+                except Exception:
                     pass
