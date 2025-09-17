@@ -1,0 +1,109 @@
+name: Chinese Character Check
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  check-chinese:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+    
+    - name: Create Chinese character check script
+      run: |
+        cat > check_chinese.py << 'EOF'
+        import os
+        import re
+        import sys
+        
+        def check_chinese_in_files(directory, extensions, description, allow_chinese=False):
+            chinese_pattern = re.compile(r'[\u4e00-\u9fff]')
+            found_files = []
+            
+            print(f"🔍 Checking for Chinese characters in {description}...")
+            
+            for root, dirs, files in os.walk(directory):
+                # Skip certain directories
+                if any(skip in root for skip in ['.git', 'node_modules', '__pycache__', 'venv']):
+                    continue
+                    
+                for file in files:
+                    if any(file.endswith(ext) for ext in extensions):
+                        filepath = os.path.join(root, file)
+                        try:
+                            with open(filepath, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                if chinese_pattern.search(content):
+                                    found_files.append(filepath)
+                                    if not allow_chinese:
+                                        lines = content.split('\n')
+                                        print(f'📁 {filepath}:')
+                                        for i, line in enumerate(lines, 1):
+                                            if chinese_pattern.search(line):
+                                                print(f'  {i:3d}: {line.strip()}')
+                                                break
+                                        print()
+                        except Exception as e:
+                            print(f'Error reading {filepath}: {e}')
+            
+            if found_files:
+                if allow_chinese:
+                    print(f'ℹ️  Found Chinese characters in {description} (expected for UI text):')
+                    for filepath in found_files[:5]:
+                        print(f'📁 {filepath}: Contains Chinese text')
+                    print(f'::notice::Chinese characters found in {description}. This is normal for UI text.')
+                    return False  # Don't fail
+                else:
+                    print(f'❌ Found Chinese characters in {description}')
+                    print(f'::error::Chinese characters found in {description}. Please use English.')
+                    return True  # Fail
+            else:
+                print(f'✅ No Chinese characters found in {description}')
+                return False  # Don't fail
+        
+        # Check different file types
+        has_errors = False
+        
+        # Check Python files (should not have Chinese)
+        if os.path.exists('backend/app'):
+            has_errors |= check_chinese_in_files('backend/app', ['.py'], 'Python files', allow_chinese=False)
+        
+        # Check JavaScript files (allow Chinese for UI text)
+        if os.path.exists('frontend/src'):
+            check_chinese_in_files('frontend/src', ['.js', '.jsx', '.ts', '.tsx'], 'JavaScript files', allow_chinese=True)
+        
+        # Check configuration files (should not have Chinese)
+        config_found = False
+        for root, dirs, files in os.walk('.'):
+            if any(skip in root for skip in ['docs', '.git', 'node_modules', '__pycache__', 'venv']):
+                continue
+            for file in files:
+                if file.endswith(('.yml', '.yaml', '.json', '.toml')):
+                    if not any(skip in file for skip in ['_zh.', 'README', 'CONTRIBUTING', 'CHANGELOG']):
+                        config_found = True
+                        break
+            if config_found:
+                break
+        
+        if config_found:
+            has_errors |= check_chinese_in_files('.', ['.yml', '.yaml', '.json', '.toml'], 'configuration files', allow_chinese=False)
+        
+        if has_errors:
+            print('\n❌ Chinese character check failed!')
+            sys.exit(1)
+        else:
+            print('\n🎉 All checks passed!')
+            print('📝 Note: Chinese characters are allowed in documentation files and frontend UI text.')
+        EOF
+    
+    - name: Run Chinese character check
+      run: python3 check_chinese.py

@@ -1,0 +1,78 @@
+{
+  "name": "redis-shake-web",
+  "version": "1.0.0",
+  "description": "A modern, web-based management platform for Redis-Shake with real-time monitoring and intuitive task management",
+  "keywords": [
+    "redis",
+    "redis-shake",
+    "data-migration",
+    "database-sync",
+    "web-interface",
+    "monitoring",
+    "management-platform",
+    "real-time",
+    "dashboard",
+    "fastapi",
+    "react",
+    "typescript",
+    "docker",
+    "synchronization"
+  ],
+  "homepage": "https://github.com/CosmosNi/RedisShakeWeb#readme",
+  "bugs": {
+    "url": "https://github.com/CosmosNi/RedisShakeWeb/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CosmosNi/RedisShakeWeb.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "CosmosNi",
+    "email": "your-email@example.com",
+    "url": "https://github.com/CosmosNi"
+  },
+  "contributors": [
+    {
+      "name": "Redis-Shake Web Team",
+      "url": "https://github.com/CosmosNi/RedisShakeWeb/graphs/contributors"
+    }
+  ],
+  "engines": {
+    "node": ">=16.0.0",
+    "python": ">=3.8.0"
+  },
+  "scripts": {
+    "start": "./cmd/start.sh",
+    "stop": "./cmd/stop.sh",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm start",
+    "dev:backend": "cd backend && python -m app.main --reload",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && npm test -- --coverage --watchAll=false",
+    "test:backend": "cd backend && pytest --cov=app --cov-report=term-missing",
+    "test:watch": "concurrently \"npm run test:frontend -- --watch\" \"npm run test:backend -- --watch\"",
+    "lint": "npm run lint:frontend && npm run lint:backend",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": "cd backend && flake8 app/ && black --check app/",
+    "lint:fix": "npm run lint:frontend -- --fix && npm run lint:backend:fix",
+    "lint:backend:fix": "cd backend && black app/",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "install:deps": "cd frontend && npm install && cd ../backend && pip install -r requirements.txt",
+    "install:dev": "cd frontend && npm install && cd ../backend && pip install -r requirements.txt -r requirements-dev.txt",
+    "clean": "rm -rf frontend/build frontend/node_modules backend/__pycache__ backend/.pytest_cache",
+    "security:audit": "cd frontend && npm audit && cd ../backend && safety check",
+    "precommit": "npm run lint && npm run test"
+  },
+  "workspaces": [
+    "frontend"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

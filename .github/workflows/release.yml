@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # Create GitHub Release
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Extract changelog for this version
+        if [ -f CHANGELOG.md ]; then
+          # Get changelog content between version headers
+          awk '/^## \[.*\]/ {if(found) exit; if($0 ~ /\[${{ steps.get_version.outputs.VERSION }}\]/) found=1; next} found' CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "No changelog found for version ${{ steps.get_version.outputs.VERSION }}" > release_notes.md
+          fi
+        else
+          echo "See [CHANGELOG.md](CHANGELOG.md) for details." > release_notes.md
+        fi
+    
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        name: Release ${{ steps.get_version.outputs.VERSION }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ contains(steps.get_version.outputs.VERSION, '-') }}
+
+  # Build and Upload Release Assets
+  build-assets:
+    runs-on: ubuntu-latest
+    needs: create-release
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      run: |
+        cd frontend && npm ci
+        cd ../backend && pip install -r requirements.txt
+    
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+    
+    - name: Create release package
+      run: |
+        mkdir -p release/redis-shake-web
+        
+        # Copy backend files
+        cp -r backend release/redis-shake-web/
+        
+        # Copy built frontend
+        cp -r frontend/build release/redis-shake-web/frontend/
+        
+        # Copy other necessary files
+        [ -d bin ] && cp -r bin release/redis-shake-web/ || echo "bin directory not found, skipping"
+        [ -d cmd ] && cp -r cmd release/redis-shake-web/ || echo "cmd directory not found, skipping"
+        [ -d docs ] && cp -r docs release/redis-shake-web/ || echo "docs directory not found, skipping"
+        cp README.md README_zh.md LICENSE release/redis-shake-web/ 2>/dev/null || echo "Some documentation files not found, skipping"
+        [ -f CHANGELOG.md ] && cp CHANGELOG.md release/redis-shake-web/ || echo "CHANGELOG.md not found, skipping"
+        [ -f CONTRIBUTING.md ] && cp CONTRIBUTING.md release/redis-shake-web/ || echo "CONTRIBUTING.md not found, skipping"
+        [ -f docker-compose.yml ] && cp docker-compose.yml release/redis-shake-web/ || echo "docker-compose.yml not found, skipping"
+        cp package.json release/redis-shake-web/
+        
+        # Create archive
+        cd release
+        tar -czf redis-shake-web-${{ needs.create-release.outputs.VERSION }}.tar.gz redis-shake-web/
+        zip -r redis-shake-web-${{ needs.create-release.outputs.VERSION }}.zip redis-shake-web/
+    
+    - name: Upload release assets
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ needs.create-release.outputs.VERSION }}
+        files: |
+          ./release/redis-shake-web-${{ needs.create-release.outputs.VERSION }}.tar.gz
+          ./release/redis-shake-web-${{ needs.create-release.outputs.VERSION }}.zip
+
+  # Build and Push Docker Images for Release
+  docker-release:
+    runs-on: ubuntu-latest
+    needs: create-release
+    if: secrets.DOCKER_USERNAME != ''
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    
+    - name: Extract version
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    
+    - name: Build and push backend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        push: true
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/redis-shake-backend:${{ steps.get_version.outputs.VERSION }}
+          ${{ secrets.DOCKER_USERNAME }}/redis-shake-backend:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Build and push frontend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend
+        push: true
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/redis-shake-frontend:${{ steps.get_version.outputs.VERSION }}
+          ${{ secrets.DOCKER_USERNAME }}/redis-shake-frontend:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max

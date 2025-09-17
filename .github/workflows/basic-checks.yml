@@ -1,0 +1,74 @@
+name: Basic Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # Basic code quality checks that should always pass
+  basic-checks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+        cache-dependency-path: backend/requirements.txt
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install Python dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install black flake8
+
+    - name: Install Node.js dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Python code formatting check
+      run: |
+        cd backend
+        black --check --diff app/
+
+    - name: Python basic linting
+      run: |
+        cd backend
+        flake8 app/ --max-line-length=88 --extend-ignore=E203,W503 --exclude=__pycache__,venv
+
+    - name: Frontend build test
+      run: |
+        cd frontend
+        npm run build
+        echo "✅ Frontend build completed successfully"
+
+    - name: Python basic tests
+      run: |
+        cd backend
+        python -m pytest tests/ -v --tb=short --disable-warnings
+
+    - name: Check project structure
+      run: |
+        echo "✅ Checking project structure..."
+        [ -f backend/app/main.py ] && echo "✅ Backend main.py exists" || echo "❌ Backend main.py missing"
+        [ -f frontend/package.json ] && echo "✅ Frontend package.json exists" || echo "❌ Frontend package.json missing"
+        [ -f backend/requirements.txt ] && echo "✅ Backend requirements.txt exists" || echo "❌ Backend requirements.txt missing"
+        [ -d backend/tests ] && echo "✅ Backend tests directory exists" || echo "❌ Backend tests directory missing"
+        echo "✅ Project structure check completed"

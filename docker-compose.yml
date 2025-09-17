@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_SHAKE_BIN_PATH=/app/bin/redis-shake
+    volumes:
+      - ./bin:/app/bin
+      - ./configs:/app/configs
+      - backend_data:/app/data
+    depends_on:
+      - redis-source
+      - redis-target
+    networks:
+      - redis-shake-network
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - redis-shake-network
+
+  # Redis Source (for testing)
+  redis-source:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_source_data:/data
+    networks:
+      - redis-shake-network
+
+  # Redis Target (for testing)
+  redis-target:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes --port 6379
+    volumes:
+      - redis_target_data:/data
+    networks:
+      - redis-shake-network
+
+volumes:
+  backend_data:
+  redis_source_data:
+  redis_target_data:
+
+networks:
+  redis-shake-network:
+    driver: bridge
