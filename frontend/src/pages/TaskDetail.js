@@ -22,10 +22,12 @@ import {
   ExclamationCircleOutlined,
   CheckCircleOutlined,
   SyncOutlined,
-  DatabaseOutlined
+  DatabaseOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
 import { taskApi } from '../services/api';
+import RealTimeLogModal from '../components/RealTimeLogModal';
 
 const { Title, Text } = Typography;
 
@@ -36,6 +38,7 @@ function TaskDetail() {
   const [task, setTask] = useState(null);
   const [realTimeStatus, setRealTimeStatus] = useState(null);
   const [statusHistory, setStatusHistory] = useState([]);
+  const [logModalVisible, setLogModalVisible] = useState(false);
 
   // 加载任务基本信息
   const loadTask = useCallback(async () => {
@@ -250,8 +253,8 @@ function TaskDetail() {
       {/* 页面头部 */}
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space>
-          <Button 
-            icon={<ArrowLeftOutlined />} 
+          <Button
+            icon={<ArrowLeftOutlined />}
             onClick={() => navigate('/sync-tasks')}
           >
             返回任务列表
@@ -260,9 +263,18 @@ function TaskDetail() {
             任务详情: {task.name}
           </Title>
         </Space>
-        <Tag color={statusConfig.color} icon={statusConfig.icon} style={{ fontSize: '14px', padding: '4px 12px' }}>
-          {statusConfig.text}
-        </Tag>
+        <Space>
+          <Button
+            type="primary"
+            icon={<FileTextOutlined />}
+            onClick={() => setLogModalVisible(true)}
+          >
+            实时日志
+          </Button>
+          <Tag color={statusConfig.color} icon={statusConfig.icon} style={{ fontSize: '14px', padding: '4px 12px' }}>
+            {statusConfig.text}
+          </Tag>
+        </Space>
       </div>
 
       <Spin spinning={loading}>
@@ -423,6 +435,14 @@ function TaskDetail() {
           />
         )}
       </Spin>
+
+      {/* 实时日志弹窗 */}
+      <RealTimeLogModal
+        visible={logModalVisible}
+        onClose={() => setLogModalVisible(false)}
+        taskId={taskId}
+        taskName={task?.name}
+      />
     </div>
   );
 }

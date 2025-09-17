@@ -18,10 +18,12 @@ import {
   EditOutlined,
   DeleteOutlined,
   ReloadOutlined,
-  EyeOutlined
+  EyeOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { taskApi } from '../services/api';
+import RealTimeLogModal from '../components/RealTimeLogModal';
 
 const { TextArea } = Input;
 
@@ -32,6 +34,8 @@ function SyncTaskList() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [form] = Form.useForm();
+  const [logModalVisible, setLogModalVisible] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
 
 
   // 默认TOML配置
@@ -334,6 +338,16 @@ target_mbbloom_version = 20603`;
             详情
           </Button>
           <Button
+            size="small"
+            icon={<FileTextOutlined />}
+            onClick={() => {
+              setSelectedTask(record);
+              setLogModalVisible(true);
+            }}
+          >
+            日志
+          </Button>
+          <Button
             type="primary"
             size="small"
             icon={<PlayCircleOutlined />}
@@ -503,6 +517,17 @@ target_mbbloom_version = 20603`;
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 实时日志弹窗 */}
+      <RealTimeLogModal
+        visible={logModalVisible}
+        onClose={() => {
+          setLogModalVisible(false);
+          setSelectedTask(null);
+        }}
+        taskId={selectedTask?.id}
+        taskName={selectedTask?.name}
+      />
     </div>
   );
 }
